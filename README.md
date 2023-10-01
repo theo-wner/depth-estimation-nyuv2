@@ -1,4 +1,4 @@
-# Semantic Segmentation of the NYUv2-Dataset
+# Monocular Depth Estimation of the NYUv2-Dataset
 ## Part of Theodor Kapler's bachelors thesis, Karlsruhe Institute of Technology (KIT)
 
 ### General
