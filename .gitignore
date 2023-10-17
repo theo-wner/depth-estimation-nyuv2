@@ -1,0 +1,7 @@
+figures/
+data/
+tb_logs/
+__pycache__/
+*.png
+*.pth
+*.ckpt
