@@ -3,12 +3,16 @@ from pytorch_lightning.loggers import TensorBoardLogger
 import config
 from dataset import NYUv2DataModule
 from model import SegFormer
+import transformers
 
 """
 Trains the model
 """
 
 if __name__ == '__main__':
+    # Set the verbosity of the transformers library to error
+    transformers.logging.set_verbosity_error()
+
     # Initialize the logger
     logger = TensorBoardLogger('logs', name='segformer')
 
@@ -25,4 +29,4 @@ if __name__ == '__main__':
         trainer = pl.Trainer(logger=logger, max_epochs=config.NUM_EPOCHS, accelerator='gpu', precision=config.PRECISION, devices=config.DEVICES)
 
     # Train the model
-    trainer.fit(model, data_module)
+    trainer.fit(model, data_module, ckpt_path=config.CHECKPOINT)

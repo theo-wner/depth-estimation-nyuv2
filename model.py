@@ -43,24 +43,24 @@ class SegFormer(pl.LightningModule):
     def training_step(self, batch, batch_index):
         images, depths = batch
 
-        preds = self.model(images)
-
-        loss = nn.functional.mse_loss(preds, depths, reduction='mean', ignore_index=config.IGNORE_INDEX)
+        _, preds = self.model(images, depths.squeeze(dim=1)) # _ because the model computes the loss internally but we compute it manually below, depths are also merely needed as dummies
         
         upsampled_preds = torch.nn.functional.interpolate(preds, size=images.shape[-2:], mode="bilinear", align_corners=False)    # upsample preds to input image size (SegFormer outputs h/4 and w/4 by default, see paper)
 
+        loss = nn.functional.mse_loss(upsampled_preds, depths, reduction='mean', ignore_index=config.IGNORE_INDEX)
+        
         self.log('train_loss', loss, on_step=False, on_epoch=True, prog_bar=True, logger=True, sync_dist=True)
 
         return loss
     
 
     def validation_step(self, batch, batch_index):
-        images, depth = batch
+        images, depths = batch
 
-        preds = self.model(images)
+        _, preds = self.model(images, depths.squeeze(dim=1)) # _ because the model computes the loss internally but we compute it manually below, depths are also merely needed as dummies
         
         upsampled_preds = torch.nn.functional.interpolate(preds, size=images.shape[-2:], mode="bilinear", align_corners=False)    # upsample logits to input image size (SegFormer outputs h/4 and w/4 by default, see paper)
         
-        val_iou = torchmetrics.MeanSquaredError(upsampled_preds, depth)
+        val_iou = torchmetrics.MeanSquaredError(upsampled_preds, depths)
         
         self.log('val_iou', val_iou, on_step=False, on_epoch=True, prog_bar=True, logger=True, sync_dist=True)
