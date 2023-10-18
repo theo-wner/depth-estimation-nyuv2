@@ -1,11 +1,8 @@
 import os
 import cv2
-import random
-import math
-import torch
 from torch.utils.data import Dataset, DataLoader
-import torchvision.transforms.functional as TF
-from torchvision import transforms
+import albumentations as A
+from albumentations.pytorch.transforms import ToTensorV2
 from torch.nn import functional as F
 import pytorch_lightning as pl
 import config
@@ -60,90 +57,53 @@ class NYUv2Dataset(Dataset):
         image_filename = os.path.join(self.images_dir, self.filenames[index])
         image = cv2.imread(image_filename)
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-        image = TF.to_tensor(image)
         return image
     
     def _load_depth(self, index):
         depth_filename = os.path.join(self.depths_dir, self.filenames[index])
         depth = cv2.imread(depth_filename, cv2.IMREAD_GRAYSCALE)
-        depth = torch.tensor(depth, dtype=torch.long).unsqueeze(0)
         return depth
+    
+    def get_training_augmentation(self):
+        train_augmentation = A.Compose([
+            A.RandomScale(scale_limit=(-0.5, +0.75), p=1), # Relates to Scaling between 0.5 and 1.75
+            A.PadIfNeeded(min_height=480, min_width=640, always_apply=True, border_mode=cv2.BORDER_CONSTANT, value=(0,0,0), mask_value=config.IGNORE_INDEX), # If the image gets smaller than 480x640    
+            A.RandomCrop(height=480, width=640, p=1),
+            A.HorizontalFlip(p=0.5),
+            A.ToFloat(),
+            ToTensorV2(transpose_mask=True)
+        ])
+        return train_augmentation
+    
+    def get_validation_augmentation(self):
+        val_augmentation = A.Compose([
+            A.ToFloat(),
+            ToTensorV2(transpose_mask=True)
+        ])
+        return val_augmentation
 
     def __getitem__(self, index):
         image = self._load_image(index)
         depth = self._load_depth(index)
 
-        # In case of training, apply data augmentation
+        # In case of training, apply data augmentation (ToTensor already included)
         if self.split == 'train':
-            # Randomly resize image and depth --> Image size changes!
-            random_scaler = RandResize(scale=(0.5, 1.75))
-            image, depth = random_scaler(image.unsqueeze(0).float(), depth.unsqueeze(0).float())
+            train_augmentation = self.get_training_augmentation()
+            transformed = train_augmentation(image=image, mask=depth)
+            image, depth = transformed['image'], transformed['mask'].unsqueeze(0)
 
-            # Random Horizontal Flip
-            if random.random() < 0.5:
-                image = TF.hflip(image)
-                depth = TF.hflip(depth)
-
-            # Preprocessing for Random Crop
-            if image.shape[1] < 480 or image.shape[2] < 640:
-                height, width = image.shape[1], image.shape[2]
-                pad_height = max(480 - height, 0)
-                pad_width = max(640 - width, 0)
-                pad_height_half = pad_height // 2
-                pad_width_half = pad_width // 2
-                border = (pad_width_half, pad_width - pad_width_half, pad_height_half, pad_height - pad_height_half)
-                image = F.pad(image, border, 'constant', 0)
-                depth = F.pad(depth, border, 'constant', config.IGNORE_INDEX)
-
-            # Random Crop
-            i, j, h, w = transforms.RandomCrop(size=(480, 640)).get_params(image, output_size=(480, 640))
-            image = TF.crop(image, i, j, h, w)
-            depth = TF.crop(depth, i, j, h, w)
-
-        # In case of validation, do nothing
+        # In case of validation, apply validation augmentation (ToTensor already included)
         elif self.split == 'test':
-            pass
-
+            val_augmentation = self.get_validation_augmentation()
+            transformed = val_augmentation(image=image, mask=depth)
+            image, depth = transformed['image'], transformed['mask'].unsqueeze(0)
+            
         return image, depth
     
 
-class RandResize(object):
-    """
-    Randomly resize image & label with scale factor in [scale_min, scale_max]
-    The size of the image gets changed!
-    Source: https://github.com/Haochen-Wang409/U2PL/blob/main/u2pl/dataset/augmentation.py
-    """
-    def __init__(self, scale, aspect_ratio=None):
-        self.scale = scale
-        self.aspect_ratio = aspect_ratio
-
-    def __call__(self, image, label):
-        if random.random() < 0.5:
-            temp_scale = self.scale[0] + (1.0 - self.scale[0]) * random.random()
-        else:
-            temp_scale = 1.0 + (self.scale[1] - 1.0) * random.random()
-
-        temp_aspect_ratio = 1.0
-        if self.aspect_ratio is not None:
-            temp_aspect_ratio = (self.aspect_ratio[0] + (self.aspect_ratio[1] - self.aspect_ratio[0]) * random.random())
-            temp_aspect_ratio = math.sqrt(temp_aspect_ratio)
-
-        scale_factor_w = temp_scale * temp_aspect_ratio
-        scale_factor_h = temp_scale / temp_aspect_ratio
-        h, w = image.size()[-2:]
-        new_w = int(w * scale_factor_w)
-        new_h = int(h * scale_factor_h)
-        image = F.interpolate(image, size=(new_h, new_w), mode="bilinear", align_corners=False)
-        label = F.interpolate(label, size=(new_h, new_w), mode="nearest")
-        return image.squeeze(), label.squeeze(0)
-
-
 if __name__ == '__main__':
     dataset = NYUv2Dataset(split='train')
-
-    image, depth = dataset[7]
-
-    print(depth.max())
-
-    # Visualize Image and Depth Map
-    visualize_img_depth(image, depth, depth, filename='test.png')
+    image, depth = dataset[0]
+    print(image.shape)
+    print(depth.shape)
+    visualize_img_depth(image, depth, depth)
