@@ -30,7 +30,7 @@ if __name__ == '__main__':
     dataset = NYUv2Dataset(split='test')
 
     # Predict
-    for i in tqdm(range(2)):
+    for i in tqdm(range(50)):
         image, depth = dataset[i]
 
         if not config.CPU_USAGE:
