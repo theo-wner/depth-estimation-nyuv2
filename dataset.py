@@ -23,8 +23,7 @@ class NYUv2DataModule(pl.LightningDataModule):
 
     # Loads the dataset (not needed data already downloaded)
     def prepare_data(self):
-        pass
-        self.test_dataset = NYUv2Dataset(split='test')it='train')
+        self.train_dataset = NYUv2Dataset(split='train')
         self.val_dataset = NYUv2Dataset(split='test')
 
     def train_dataloader(self):
