@@ -22,7 +22,7 @@ class SegFormer(pl.LightningModule):
 
         model_config = SegformerConfig.from_pretrained(f'nvidia/mit-{config.BACKBONE}', num_labels=config.NUM_CLASSES, semantic_loss_ignore_index = config.IGNORE_INDEX, return_dict=False)
         self.model = SegformerForSemanticSegmentation(model_config) # this does not load the imagenet weights yet.
-        #self.model = self.model.from_pretrained(f'nvidia/mit-{config.BACKBONE}', num_labels=config.NUM_CLASSES, return_dict=False)  # this loads the weights
+        self.model = self.model.from_pretrained(f'nvidia/mit-{config.BACKBONE}', num_labels=config.NUM_CLASSES, return_dict=False)  # this loads the weights
 
         # Initialize the loss function
         self.loss_fn = torch.nn.MSELoss()

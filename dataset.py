@@ -24,9 +24,7 @@ class NYUv2DataModule(pl.LightningDataModule):
     # Loads the dataset (not needed data already downloaded)
     def prepare_data(self):
         pass
-
-    def setup(self, stage):
-        self.train_dataset = NYUv2Dataset(split='train')
+        self.test_dataset = NYUv2Dataset(split='test')it='train')
         self.val_dataset = NYUv2Dataset(split='test')
 
     def train_dataloader(self):
@@ -67,7 +65,7 @@ class NYUv2Dataset(Dataset):
     def get_training_augmentation(self):
         train_augmentation = A.Compose([
             A.RandomScale(scale_limit=(-0.5, +0.75), p=1), # Relates to Scaling between 0.5 and 1.75
-            A.PadIfNeeded(min_height=480, min_width=640, always_apply=True, border_mode=cv2.BORDER_CONSTANT, value=(0,0,0), mask_value=config.IGNORE_INDEX), # If the image gets smaller than 480x640    
+            A.PadIfNeeded(min_height=480, min_width=640, always_apply=True, border_mode=cv2.BORDER_CONSTANT, value=(0,0,0), mask_value=0), # If the image gets smaller than 480x640    
             A.RandomCrop(height=480, width=640, p=1),
             A.HorizontalFlip(p=0.5),
             A.ToFloat(),
