@@ -1,8 +1,11 @@
 import os
 import cv2
+from PIL import Image
+import numpy as np
 from torch.utils.data import Dataset, DataLoader
 import albumentations as A
-from albumentations.pytorch.transforms import ToTensorV2
+import torchvision.transforms.functional as TF
+import torch
 from torch.nn import functional as F
 import pytorch_lightning as pl
 import config
@@ -52,13 +55,12 @@ class NYUv2Dataset(Dataset):
     
     def _load_image(self, index):
         image_filename = os.path.join(self.images_dir, self.filenames[index])
-        image = cv2.imread(image_filename)
-        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        image = np.array(Image.open(image_filename))
         return image
     
     def _load_depth(self, index):
         depth_filename = os.path.join(self.depths_dir, self.filenames[index])
-        depth = cv2.imread(depth_filename, cv2.IMREAD_GRAYSCALE)
+        depth = np.array(Image.open(depth_filename))
         return depth
     
     def get_training_augmentation(self):
@@ -67,33 +69,25 @@ class NYUv2Dataset(Dataset):
             A.PadIfNeeded(min_height=480, min_width=640, always_apply=True, border_mode=cv2.BORDER_CONSTANT, value=(0,0,0), mask_value=0), # If the image gets smaller than 480x640    
             A.RandomCrop(height=480, width=640, p=1),
             A.HorizontalFlip(p=0.5),
-            A.ToFloat(),
-            ToTensorV2(transpose_mask=True)
         ])
         return train_augmentation
-    
-    def get_validation_augmentation(self):
-        val_augmentation = A.Compose([
-            A.ToFloat(),
-            ToTensorV2(transpose_mask=True)
-        ])
-        return val_augmentation
 
     def __getitem__(self, index):
         image = self._load_image(index)
         depth = self._load_depth(index)
 
-        # In case of training, apply data augmentation (ToTensor already included)
+        # In case of training, apply data augmentation (and ToTensor)
         if self.split == 'train':
             train_augmentation = self.get_training_augmentation()
             transformed = train_augmentation(image=image, mask=depth)
-            image, depth = transformed['image'], transformed['mask'].unsqueeze(0)
+            image, depth = transformed['image'], transformed['mask']
+            image = TF.to_tensor(image)
+            depth = torch.tensor(depth, dtype=torch.long).unsqueeze(0)
 
-        # In case of validation, apply validation augmentation (ToTensor already included)
+        # In case of validation, only apply ToTensor
         elif self.split == 'test':
-            val_augmentation = self.get_validation_augmentation()
-            transformed = val_augmentation(image=image, mask=depth)
-            image, depth = transformed['image'], transformed['mask'].unsqueeze(0)
+            image = TF.to_tensor(image)
+            depth = torch.tensor(depth, dtype=torch.long).unsqueeze(0)
             
         return image, depth
     

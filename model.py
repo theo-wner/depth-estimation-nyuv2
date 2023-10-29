@@ -1,19 +1,20 @@
 import torch
 import torchmetrics
+import torch.nn.functional as F
 from torch import nn
 import pytorch_lightning as pl
-import segmentation_models_pytorch as smp
-import ssl
 import math
 from transformers import SegformerForSemanticSegmentation, SegformerConfig
 import config
 from utils import PolyLR
+from utils import RMSLELoss
+from utils import compute_depth_metrics
 
 """
 Defines the model
 """
 
-class SegFormer(pl.LightningModule):
+class DepthFormer(pl.LightningModule):
 
     def __init__(self):
 
@@ -25,22 +26,13 @@ class SegFormer(pl.LightningModule):
         self.model = self.model.from_pretrained(f'nvidia/mit-{config.BACKBONE}', num_labels=config.NUM_CLASSES, return_dict=False)  # this loads the weights
 
         # Initialize the loss function
-        self.loss_fn = torch.nn.MSELoss()
+        self.loss_fn = RMSLELoss()
 
         # Initialize the optimizer
         self.optimizer = torch.optim.AdamW(params=[
             {'params': self.model.segformer.parameters(), 'lr': config.LEARNING_RATE},
             {'params': self.model.decode_head.parameters(), 'lr': 10 * config.LEARNING_RATE},
         ], lr=config.LEARNING_RATE, weight_decay=config.WEIGHT_DECAY)
-
-        # Initialize the metrics
-        self.metrics = torchmetrics.MeanSquaredError()
-    
-
-    # Function to mask the predicitons because torchmetrics.MeanSquaredError() does not support ignore_index
-    def mask(self, pred, target, ignore_index):
-        mask = target == ignore_index
-        return pred * mask
 
 
     def configure_optimizers(self):
@@ -57,15 +49,15 @@ class SegFormer(pl.LightningModule):
     def training_step(self, batch, batch_index):
         images, depths = batch
 
-        depths = depths.type(torch.float32)
-
         _, preds = self.model(images, depths.squeeze(dim=1)) # _ because the model computes the loss internally but we compute it manually below, depths are also merely needed as dummies
         
-        upsampled_preds = torch.nn.functional.interpolate(preds, size=images.shape[-2:], mode="bilinear", align_corners=False)    # upsample preds to input image size (SegFormer outputs h/4 and w/4 by default, see paper)
+        preds = torch.nn.functional.interpolate(preds, size=images.shape[-2:], mode="bilinear", align_corners=False)    # upsample preds to input image size (SegFormer outputs h/4 and w/4 by default, see paper)
 
-        masked_preds = self.mask(upsampled_preds, depths, config.IGNORE_INDEX) # mask the predictions because torchmetrics.MeanSquaredError() does not support ignore_index
+        preds = F.relu(preds, inplace=True)
         
-        loss = self.loss_fn(masked_preds, depths)
+        valid_mask = (depths > 1e-3) & (depths < 10)    # common practice: https://arxiv.org/pdf/2207.04535v2.pdf
+        
+        loss = self.loss_fn(preds, depths, valid_mask)
         
         self.log('loss', loss, on_step=False, on_epoch=True, prog_bar=True, logger=True, sync_dist=True)
 
@@ -77,8 +69,17 @@ class SegFormer(pl.LightningModule):
 
         _, preds = self.model(images, depths.squeeze(dim=1)) # _ because the model computes the loss internally but we compute it manually below, depths are also merely needed as dummies
         
-        upsampled_preds = torch.nn.functional.interpolate(preds, size=images.shape[-2:], mode="bilinear", align_corners=False)    # upsample logits to input image size (SegFormer outputs h/4 and w/4 by default, see paper)
+        preds = torch.nn.functional.interpolate(preds, size=images.shape[-2:], mode="bilinear", align_corners=False)    # upsample preds to input image size (SegFormer outputs h/4 and w/4 by default, see paper)
 
-        mse = self.metrics(upsampled_preds, depths)
+        preds = F.relu(preds, inplace=True)
+
+        valid_mask = (depths > 1e-3) & (depths < 10)
+
+        metrics = compute_depth_metrics(preds[valid_mask], depths[valid_mask])
         
-        self.log('mse', mse, on_step=False, on_epoch=True, prog_bar=True, logger=True, sync_dist=True)
+        self.log('val_rmse', metrics[0], on_step=False, on_epoch=True, prog_bar=True, logger=True, sync_dist=True)
+        self.log('val_abs_rel', metrics[1], on_step=False, on_epoch=True, prog_bar=False, logger=True, sync_dist=True)
+        self.log('val_log10', metrics[2], on_step=False, on_epoch=True, prog_bar=False, logger=True, sync_dist=True)
+        self.log('val_d1', metrics[3], on_step=False, on_epoch=True, prog_bar=True, logger=True, sync_dist=True)
+        self.log('val_d2', metrics[4], on_step=False, on_epoch=True, prog_bar=True, logger=True, sync_dist=True)
+        self.log('val_d3', metrics[5], on_step=False, on_epoch=True, prog_bar=True, logger=True, sync_dist=True)
