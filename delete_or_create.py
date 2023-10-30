@@ -13,7 +13,7 @@ import shutil
 #os.rmdir('./Abbildungen/')
 
 # Verzeichnis und seine Inhalte löschen
-shutil.rmtree('logs/')
+shutil.rmtree('logs/depthformer/version_8')
 
 # Neues Verzeichnis erstellen
 #os.mkdir('./extract_dataset/class_labels/')

@@ -1,5 +1,5 @@
 import torch
-from model import SegFormer
+from model import DepthFormer
 from dataset import NYUv2Dataset
 from tqdm import tqdm
 import transformers
@@ -16,13 +16,13 @@ if __name__ == '__main__':
     transformers.logging.set_verbosity_error()
 
     # Initialize the model (and load it to the CPU)
-    model = SegFormer()
+    model = DepthFormer()
 
     if config.CPU_USAGE:
         checkpoint = torch.load(config.CHECKPOINT, map_location=torch.device('cpu'))
         model.load_state_dict(checkpoint["state_dict"])
     else:
-        model = SegFormer.load_from_checkpoint(config.CHECKPOINT)
+        model = DepthFormer.load_from_checkpoint(config.CHECKPOINT)
         model = model.to(config.DEVICES[0])
     model.eval()
 

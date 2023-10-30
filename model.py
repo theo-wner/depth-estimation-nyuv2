@@ -75,7 +75,10 @@ class DepthFormer(pl.LightningModule):
 
         valid_mask = (depths > 1e-3) & (depths < 10)
 
-        metrics = compute_depth_metrics(preds[valid_mask], depths[valid_mask])
+        preds = preds[valid_mask]
+        depths = depths[valid_mask]
+
+        metrics = compute_depth_metrics(preds, depths)
         
         self.log('val_rmse', metrics[0], on_step=False, on_epoch=True, prog_bar=True, logger=True, sync_dist=True)
         self.log('val_abs_rel', metrics[1], on_step=False, on_epoch=True, prog_bar=False, logger=True, sync_dist=True)

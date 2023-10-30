@@ -47,6 +47,9 @@ def compute_depth_metrics(pred, actual):
     pred = pred.cpu().numpy()
     actual = actual.cpu().numpy()
 
+    # Add small epsilon to pred to avoid division by 0
+    pred += 1e-6
+
     rms = (actual - pred) ** 2
     rms = np.sqrt(rms.mean())
 
@@ -95,7 +98,7 @@ def visualize_img_depth(image, gt_depth, pr_depth, filename='test.png'):
     plt.xticks([])
     plt.yticks([])
     cmap = plt.cm.get_cmap('Spectral')
-    norm = plt.Normalize(vmin=0, vmax=40)
+    norm = plt.Normalize(vmin=0, vmax=10)
     plt.imshow(gt_depth.squeeze().numpy(), cmap=cmap, norm=norm)
 
     # Plot Predicted Depth Map
@@ -103,7 +106,7 @@ def visualize_img_depth(image, gt_depth, pr_depth, filename='test.png'):
     plt.xticks([])
     plt.yticks([])
     cmap = plt.cm.get_cmap('Spectral')
-    norm = plt.Normalize(vmin=0, vmax=40)
+    norm = plt.Normalize(vmin=0, vmax=10)
     plt.imshow(pr_depth.squeeze().numpy(), cmap=cmap, norm=norm)
 
     # Add Colorbar to the right of the plots with original depth values
@@ -112,7 +115,7 @@ def visualize_img_depth(image, gt_depth, pr_depth, filename='test.png'):
                         orientation='vertical', 
                         pad=0.02,
                         fraction=0.012)
-    cbar.set_label('Depth')
+    cbar.set_label('Depth in meters')
 
     # Save Figure
     directory = './figures'

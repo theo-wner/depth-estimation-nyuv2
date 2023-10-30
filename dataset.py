@@ -61,7 +61,8 @@ class NYUv2Dataset(Dataset):
     def _load_depth(self, index):
         depth_filename = os.path.join(self.depths_dir, self.filenames[index])
         depth = np.array(Image.open(depth_filename))
-        return depth
+        depth = np.divide(depth, 1000.) # Convert to meters
+        return depth # Convert to meters
     
     def get_training_augmentation(self):
         train_augmentation = A.Compose([
@@ -82,19 +83,24 @@ class NYUv2Dataset(Dataset):
             transformed = train_augmentation(image=image, mask=depth)
             image, depth = transformed['image'], transformed['mask']
             image = TF.to_tensor(image)
-            depth = torch.tensor(depth, dtype=torch.long).unsqueeze(0)
+            depth = torch.tensor(depth, dtype=torch.float).unsqueeze(0)
 
         # In case of validation, only apply ToTensor
         elif self.split == 'test':
             image = TF.to_tensor(image)
-            depth = torch.tensor(depth, dtype=torch.long).unsqueeze(0)
+            depth = torch.tensor(depth, dtype=torch.float).unsqueeze(0)
             
         return image, depth
     
 
 if __name__ == '__main__':
+    # Calculate the min and max depth values of the dataset
     dataset = NYUv2Dataset(split='train')
-    image, depth = dataset[0]
-    print(image.shape)
-    print(depth.shape)
-    visualize_img_depth(image, depth, depth)
+    depths = []
+    for i in range(len(dataset)):
+        _, depth = dataset[i]
+        depths.append(depth)
+    depths = torch.cat(depths)
+    print(depths.min(), depths.max())
+
+    
