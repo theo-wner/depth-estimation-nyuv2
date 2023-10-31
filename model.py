@@ -28,6 +28,9 @@ class DepthFormer(pl.LightningModule):
         # Initialize the loss function
         self.loss_fn = RMSLELoss()
 
+        # Initialize the metrics
+        self.metrics = compute_depth_metrics
+
         # Initialize the optimizer
         self.optimizer = torch.optim.AdamW(params=[
             {'params': self.model.segformer.parameters(), 'lr': config.LEARNING_RATE},
@@ -78,7 +81,7 @@ class DepthFormer(pl.LightningModule):
         preds = preds[valid_mask]
         depths = depths[valid_mask]
 
-        metrics = compute_depth_metrics(preds, depths)
+        metrics = self.metrics(preds, depths)
         
         self.log('val_rmse', metrics[0], on_step=False, on_epoch=True, prog_bar=True, logger=True, sync_dist=True)
         self.log('val_abs_rel', metrics[1], on_step=False, on_epoch=True, prog_bar=False, logger=True, sync_dist=True)
